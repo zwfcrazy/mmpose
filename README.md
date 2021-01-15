@@ -81,7 +81,7 @@ Supported methods for human pose estimation:
 - [x] [MSPN](configs/top_down/mspn/README.md)
 - [x] [RSN](configs/top_down/rsn/README.md)
 
-Supported datasets:
+Supported [datasets](https://mmpose.readthedocs.io/en/latest/datasets.html):
 
 - [x] [COCO](http://cocodataset.org/)
 - [x] [COCO-WholeBody](https://github.com/jin-s13/COCO-WholeBody/)
@@ -100,7 +100,7 @@ Supported datasets:
 - [x] [Human3.6M](http://vision.imar.ro/human3.6m/description.php)
 
 Results and models are available in the *README.md* of each method's config directory.
-A summary can be found in the [**model zoo**](https://mmpose.readthedocs.io/en/latest/top_down_models.html) page.
+A summary can be found in the [**model zoo**](https://mmpose.readthedocs.io/en/latest/modelzoo.html) page.
 We will keep up with the latest progress of the community, and support more popular algorithms and frameworks.
 
 If you have any feature requests, please feel free to leave a comment in [Issues](https://github.com/open-mmlab/mmpose/issues/9).
@@ -147,6 +147,19 @@ Please refer to [FAQ](docs/faq.md) for frequently asked questions.
 
 This project is released under the [Apache 2.0 license](LICENSE).
 
+## Citation
+
+If you find this project useful in your research, please consider cite:
+
+```latex
+@misc{mmpose2020,
+    title={OpenMMLab Pose Estimation Toolbox and Benchmark},
+    author={MMPose Contributors},
+    howpublished = {\url{https://github.com/open-mmlab/mmpose}},
+    year={2020}
+}
+```
+
 ## Contributing
 
 We appreciate all contributions to improve MMPose. Please refer to [CONTRIBUTING.md](https://github.com/open-mmlab/mmpose/blob/master/.github/CONTRIBUTING.md) for the contributing guideline.
@@ -156,3 +169,15 @@ We appreciate all contributions to improve MMPose. Please refer to [CONTRIBUTING
 MMPose is an open source project that is contributed by researchers and engineers from various colleges and companies.
 We appreciate all the contributors who implement their methods or add new features, as well as users who give valuable feedbacks.
 We wish that the toolbox and benchmark could serve the growing research community by providing a flexible toolkit to reimplement existing methods and develop their own new models.
+
+## Projects in OpenMMLab
+
+- [MMCV](https://github.com/open-mmlab/mmcv): OpenMMLab foundational library for computer vision.
+- [MMClassification](https://github.com/open-mmlab/mmclassification): OpenMMLab image classification toolbox and benchmark.
+- [MMDetection](https://github.com/open-mmlab/mmdetection): OpenMMLab detection toolbox and benchmark.
+- [MMDetection3D](https://github.com/open-mmlab/mmdetection3d): OpenMMLab's next-generation platform for general 3D object detection.
+- [MMSegmentation](https://github.com/open-mmlab/mmsegmentation): OpenMMLab semantic segmentation toolbox and benchmark.
+- [MMAction2](https://github.com/open-mmlab/mmaction2): OpenMMLab's next-generation action understanding toolbox and benchmark.
+- [MMTracking](https://github.com/open-mmlab/mmtracking): OpenMMLab video perception toolbox and benchmark.
+- [MMPose](https://github.com/open-mmlab/mmpose): OpenMMLab pose estimation toolbox and benchmark.
+- [MMEditing](https://github.com/open-mmlab/mmediting): OpenMMLab image and video editing toolbox.

@@ -11,36 +11,62 @@ from numpy.testing import assert_almost_equal
 from mmpose.datasets import DATASETS
 
 
-def load_json_to_output(json_name, prefix=''):
+def load_json_to_output(json_name, prefix='', batch_size=2):
     data = json.load(open(json_name, 'r'))
     outputs = []
+    num_data = len(data['images'])
+    for i in range(0, num_data, batch_size):
+        keypoints = np.stack([
+            np.array(data['annotations'][j]['keypoints'],
+                     dtype=np.float32).reshape((-1, 3))
+            for j in range(i, min(i + batch_size, num_data))
+        ])
+        box = np.zeros((batch_size, 6), dtype=np.float32)
+        image_paths = [
+            os.path.join(prefix, data['images'][j]['file_name'])
+            for j in range(i, min(i + batch_size, num_data))
+        ]
+        bbox_ids = [j for j in range(i, min(i + batch_size, num_data))]
 
-    for image_info, anno in zip(data['images'], data['annotations']):
-        keypoints = np.array(
-            anno['keypoints'], dtype=np.float32).reshape((1, -1, 3))
-        box = np.array([0, 0, 0, 0, 0, 0], dtype=np.float32).reshape(1, -1)
-        img_path = []
-        img_path[:0] = os.path.join(prefix, image_info['file_name'])
-        output = (keypoints, box, img_path, None)
+        output = {}
+        output['preds'] = keypoints
+        output['boxes'] = box
+        output['image_paths'] = image_paths
+        output['output_heatmap'] = None
+        output['bbox_ids'] = bbox_ids
+
         outputs.append(output)
     return outputs
 
 
-def convert_db_to_output(db):
+def convert_db_to_output(db, batch_size=2):
     outputs = []
+    len_db = len(db)
+    for i in range(0, len_db, batch_size):
+        keypoints = np.stack([
+            db[j]['joints_3d'].reshape((-1, 3))
+            for j in range(i, min(i + batch_size, len_db))
+        ])
+        image_paths = [
+            db[j]['image_file'] for j in range(i, min(i + batch_size, len_db))
+        ]
+        bbox_ids = [j for j in range(i, min(i + batch_size, len_db))]
+        box = np.stack(
+            np.array([
+                db[j]['center'][0], db[j]['center'][1], db[j]['scale'][0],
+                db[j]['scale'][1], db[j]['scale'][0] * db[j]['scale'][1] *
+                200 * 200, 1.0
+            ],
+                     dtype=np.float32)
+            for j in range(i, min(i + batch_size, len_db)))
 
-    for item in db:
-        keypoints = item['joints_3d'].reshape((1, -1, 3))
-        center = item['center']
-        scale = item['scale']
-        box = np.array([
-            center[0], center[1], scale[0], scale[1],
-            scale[0] * scale[1] * 200 * 200, 1.0
-        ],
-                       dtype=np.float32).reshape(1, -1)
-        img_path = []
-        img_path[:0] = item['image_file']
-        output = (keypoints, box, img_path, None)
+        output = {}
+        output['preds'] = keypoints
+        output['boxes'] = box
+        output['image_paths'] = image_paths
+        output['output_heatmap'] = None
+        output['bbox_ids'] = bbox_ids
+
         outputs.append(output)
 
     return outputs
@@ -76,7 +102,6 @@ def test_top_down_COCO_dataset():
         vis_thr=0.2,
         use_gt_bbox=True,
         det_bbox_thr=0.0,
-        image_thr=0.0,
         bbox_file='tests/data/coco/test_coco_det_AP_H_56.json',
     )
     # Test det bbox
@@ -227,7 +252,6 @@ def test_top_down_PoseTrack18_dataset():
         vis_thr=0.2,
         use_gt_bbox=True,
         det_bbox_thr=0.0,
-        image_thr=0.0,
         bbox_file='tests/data/posetrack18/'
         'test_posetrack18_human_detections.json',
     )
@@ -292,7 +316,6 @@ def test_top_down_CrowdPose_dataset():
         vis_thr=0.2,
         use_gt_bbox=True,
         det_bbox_thr=0.0,
-        image_thr=0.0,
         bbox_file='tests/data/crowdpose/test_crowdpose_det_AP_40.json',
     )
     # Test det bbox
@@ -364,7 +387,6 @@ def test_top_down_COCO_wholebody_dataset():
         vis_thr=0.2,
         use_gt_bbox=True,
         det_bbox_thr=0.0,
-        image_thr=0.0,
         bbox_file='tests/data/coco/test_coco_det_AP_H_56.json',
     )
     # Test det bbox
@@ -438,7 +460,6 @@ def test_top_down_OCHuman_dataset():
         vis_thr=0.2,
         use_gt_bbox=True,
         det_bbox_thr=0.0,
-        image_thr=0.0,
         bbox_file='',
     )
 
@@ -521,6 +542,16 @@ def test_top_down_OneHand10K_dataset():
     assert custom_dataset.test_mode is False
     assert custom_dataset.num_images == 4
     _ = custom_dataset[0]
+
+    outputs = load_json_to_output(
+        'tests/data/onehand10k/test_onehand10k.json',
+        'tests/data/onehand10k/',
+        batch_size=1)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        infos = custom_dataset.evaluate(outputs, tmpdir, ['PCK', 'EPE', 'AUC'])
+        assert_almost_equal(infos['PCK'], 1.0)
+        assert_almost_equal(infos['AUC'], 0.95)
+        assert_almost_equal(infos['EPE'], 0.0)
 
     outputs = load_json_to_output('tests/data/onehand10k/test_onehand10k.json',
                                   'tests/data/onehand10k/')
