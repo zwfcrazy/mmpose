@@ -432,6 +432,8 @@ class TopDownGenerateTarget:
         assert target_type in ['GaussianHeatMap', 'CombinedTarget']
 
         if target_type == 'GaussianHeatMap':
+
+            start = timer()
             target = np.zeros((num_joints, heatmap_size[1], heatmap_size[0]),
                               dtype=np.float32)
 
@@ -475,37 +477,46 @@ class TopDownGenerateTarget:
                     target[joint_id][img_y[0]:img_y[1], img_x[0]:img_x[1]] = \
                         g[g_y[0]:g_y[1], g_x[0]:g_x[1]]
         elif target_type == 'CombinedTarget':
+
             target = np.zeros(
                 (num_joints, 3, heatmap_size[1] * heatmap_size[0]),
                 dtype=np.float32)
             feat_width = heatmap_size[0]
             feat_height = heatmap_size[1]
+
             feat_x_int = np.arange(0, feat_width)
+            feat_x_int = np.tile(feat_x_int, feat_height)
+
             feat_y_int = np.arange(0, feat_height)
-            feat_x_int, feat_y_int = np.meshgrid(feat_x_int, feat_y_int)
-            feat_x_int = feat_x_int.flatten()
-            feat_y_int = feat_y_int.flatten()
+            feat_y_int = np.repeat(feat_y_int, feat_width)
+
             # Calculate the radius of the positive area in classification
             #   heatmap.
             valid_radius = factor * heatmap_size[1]
+
             feat_stride = (image_size - 1.0) / (heatmap_size - 1.0)
+
             for joint_id in range(num_joints):
                 mu_x = joints_3d[joint_id][0] / feat_stride[0]
                 mu_y = joints_3d[joint_id][1] / feat_stride[1]
+
                 x_offset = (mu_x - feat_x_int) / valid_radius
                 y_offset = (mu_y - feat_y_int) / valid_radius
+
                 dis = x_offset**2 + y_offset**2
+
                 keep_pos = np.where(dis <= 1)[0]
+
                 v = target_weight[joint_id]
                 if v > 0.5:
                     target[joint_id, 0, keep_pos] = 1
                     target[joint_id, 1, keep_pos] = x_offset[keep_pos]
                     target[joint_id, 2, keep_pos] = y_offset[keep_pos]
+
             target = target.reshape(num_joints * 3, heatmap_size[1],
                                     heatmap_size[0])
-
-        if use_different_joint_weights:
-            target_weight = np.multiply(target_weight, joint_weights)
+            if use_different_joint_weights:
+                target_weight = np.multiply(target_weight, joint_weights)
 
         return target, target_weight
 
