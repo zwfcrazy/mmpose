@@ -38,7 +38,7 @@ visualizer = dict(
 
 # codec settings
 codec = dict(
-    type='UDPHeatmap', input_size=(256, 256), heatmap_size=(64, 64), sigma=2)
+    type='UDPHeatmap', input_size=(192, 256), heatmap_size=(48, 64), sigma=2)
 
 # model settings
 model = dict(
@@ -78,7 +78,7 @@ model = dict(
                 num_channels=(32, 64, 128, 256))),
         init_cfg=dict(
             type='Pretrained',
-            checkpoint='/mnt/user/zhuwenfei/human_pose/outputs/pose/pretrain/wholebody/hrnet-w32-256x256/epoch_210_dev-1.x.pth'),
+            checkpoint='/mnt/user/zhuwenfei/human_pose/weights/hrnet_w32_coco_wholebody_256x192-853765cd_20200918_dev-1.x.pth'),
     ),
     head=dict(
         type='HeatmapHead',
@@ -107,6 +107,19 @@ train_pipeline = [
     dict(type='RandomHalfBody'),
     dict(type='RandomBBoxTransform'),
     dict(type='TopdownAffine', input_size=codec['input_size'], use_udp=True),
+    dict(
+        type='Albumentation',
+        transforms=[
+            dict(
+                type='CoarseDropout',
+                max_holes=8,
+                max_height=40,
+                max_width=40,
+                min_holes=1,
+                min_height=10,
+                min_width=10,
+                p=0.5),
+        ]),
     dict(type='GenerateTarget', target_type='heatmap', encoder=codec),
     dict(type='PackPoseInputs', pack_transformed=True)
 ]
@@ -119,7 +132,7 @@ val_pipeline = [
 
 # data loaders
 train_dataloader = dict(
-    batch_size=192,
+    batch_size=256,
     num_workers=32,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),

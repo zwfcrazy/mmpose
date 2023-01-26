@@ -1,4 +1,4 @@
-_base_ = ['../../../_base_/default_runtime.py']
+_base_ = ['../_base_/default_runtime.py', '../_base_/datasets/coco_xiaoice_school.py']
 
 # runtime
 train_cfg = dict(max_epochs=210, val_interval=10)
@@ -27,11 +27,18 @@ param_scheduler = [
 auto_scale_lr = dict(base_batch_size=512)
 
 # hooks
-default_hooks = dict(checkpoint=dict(save_best='coco/AP', rule='greater'))
+default_hooks = dict(
+    checkpoint=dict(save_best='all/AP', rule='greater'),
+    visualization=dict(type='PoseVisualizationHook', enable=True, enable_train=True, num_images=3),
+)
+
+vis_backends = [dict(type='LocalVisBackend'), dict(type='TensorboardVisBackend')]
+visualizer = dict(
+    type='PoseLocalVisualizer', vis_backends=vis_backends, name='visualizer')
 
 # codec settings
 codec = dict(
-    type='MSRAHeatmap', input_size=(192, 256), heatmap_size=(48, 64), sigma=2)
+    type='UDPHeatmap', input_size=(192, 256), heatmap_size=(48, 64), sigma=2)
 
 # model settings
 model = dict(
@@ -71,28 +78,26 @@ model = dict(
                 num_channels=(32, 64, 128, 256))),
         init_cfg=dict(
             type='Pretrained',
-            prefix='backbone.',
-            checkpoint='https://download.openmmlab.com/mmpose/v1/'
-            'body_2d_keypoint/topdown_heatmap/coco/'
-            'td-hm_hrnet-w32_8xb64-210e_coco-256x192-81c58e40_20220909.pth'),
+            checkpoint='/mnt/user/zhuwenfei/human_pose/weights/hrnet_w32_coco_wholebody_256x192-853765cd_20200918_dev-1.x.pth'),
     ),
     head=dict(
         type='HeatmapHead',
         in_channels=32,
-        out_channels=17,
+        out_channels=40,
         deconv_out_channels=None,
         loss=dict(type='KeypointMSELoss', use_target_weight=True),
         decoder=codec),
     test_cfg=dict(
-        flip_test=True,
+        flip_test=False,
         flip_mode='heatmap',
-        shift_heatmap=True,
+        shift_heatmap=False,
+        output_heatmaps=True
     ))
 
 # base dataset settings
 dataset_type = 'CocoDataset'
 data_mode = 'topdown'
-data_root = 'data/coco/'
+data_root = '/mnt/user/zhuwenfei/human_pose/data/school/pose/cocktail/'
 
 # pipelines
 train_pipeline = [
@@ -101,65 +106,66 @@ train_pipeline = [
     dict(type='RandomFlip', direction='horizontal'),
     dict(type='RandomHalfBody'),
     dict(type='RandomBBoxTransform'),
-    dict(type='TopdownAffine', input_size=codec['input_size']),
-    dict(
-        type='Albumentation',
-        transforms=[
-            dict(
-                type='CoarseDropout',
-                max_holes=8,
-                max_height=40,
-                max_width=40,
-                min_holes=1,
-                min_height=10,
-                min_width=10,
-                p=0.5),
-        ]),
+    dict(type='TopdownAffine', input_size=codec['input_size'], use_udp=True),
     dict(type='GenerateTarget', target_type='heatmap', encoder=codec),
-    dict(type='PackPoseInputs')
+    dict(type='PackPoseInputs', pack_transformed=True)
 ]
 val_pipeline = [
     dict(type='LoadImage', file_client_args={{_base_.file_client_args}}),
     dict(type='GetBBoxCenterScale'),
-    dict(type='TopdownAffine', input_size=codec['input_size']),
+    dict(type='TopdownAffine', input_size=codec['input_size'], use_udp=True),
     dict(type='PackPoseInputs')
 ]
 
 # data loaders
 train_dataloader = dict(
-    batch_size=64,
-    num_workers=2,
+    batch_size=256,
+    num_workers=32,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
         type=dataset_type,
+        metainfo=_base_.dataset_info,
         data_root=data_root,
         data_mode=data_mode,
-        ann_file='annotations/person_keypoints_train2017.json',
-        data_prefix=dict(img='train2017/'),
+        ann_file='train.json',
+        data_prefix=dict(img='train/'),
         pipeline=train_pipeline,
     ))
 val_dataloader = dict(
     batch_size=32,
-    num_workers=2,
+    num_workers=16,
     persistent_workers=True,
     drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False, round_up=False),
     dataset=dict(
         type=dataset_type,
+        metainfo=_base_.dataset_info,
         data_root=data_root,
         data_mode=data_mode,
-        ann_file='annotations/person_keypoints_val2017.json',
-        bbox_file='data/coco/person_detection_results/'
-        'COCO_val2017_detections_AP_H_56_person.json',
-        data_prefix=dict(img='val2017/'),
+        ann_file='val_coco.json',
+        data_prefix=dict(img='val_coco/'),
         test_mode=True,
         pipeline=val_pipeline,
     ))
 test_dataloader = val_dataloader
 
-# evaluators
+# val_evaluator = dict(
+#     type='CocoMetric',
+#     ann_file=data_root + 'val.json')
+
 val_evaluator = dict(
-    type='CocoMetric',
-    ann_file=data_root + 'annotations/person_keypoints_val2017.json')
+    type='PartitionMetric',
+    metric=dict(
+        type='CocoMetric',
+    ),
+    partitions=dict(
+        body=range(17),
+        foot=range(17, 23),
+        jaw_lip=range(23, 28),
+        left_hand=range(28, 34),
+        right_hand=range(34, 40),
+        all=range(40)
+    )
+)
 test_evaluator = val_evaluator
