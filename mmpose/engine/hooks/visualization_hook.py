@@ -48,6 +48,8 @@ class PoseVisualizationHook(Hook):
 
     def __init__(self,
                  enable: bool = False,
+                 enable_train: bool = False,
+                 num_images: int = 1,
                  interval: int = 50,
                  score_thr: float = 0.3,
                  show: bool = False,
@@ -55,6 +57,7 @@ class PoseVisualizationHook(Hook):
                  out_dir: Optional[str] = None,
                  file_client_args: dict = dict(backend='disk')):
         self._visualizer: Visualizer = Visualizer.get_current_instance()
+        self.num_images = num_images
         self.interval = interval
         self.score_thr = score_thr
         self.show = show
@@ -70,8 +73,43 @@ class PoseVisualizationHook(Hook):
         self.file_client_args = file_client_args.copy()
         self.file_client = None
         self.enable = enable
+        self.enable_train = enable_train
         self.out_dir = out_dir
         self._test_index = 0
+
+    def after_train_iter(self, runner: Runner, batch_idx: int, data_batch: dict,
+                         outputs: Sequence[PoseDataSample]) -> None:
+        
+        if not (self.enable and self.enable_train):
+            return
+        
+        if self.file_client is None:
+            self.file_client = mmengine.FileClient(**self.file_client_args)
+
+        self._visualizer.set_dataset_meta(runner.train_dataloader.dataset.metainfo)
+
+        total_curr_iter = runner.iter + batch_idx
+
+        # Visualize only the first data
+        if total_curr_iter % self.interval == 0:
+            for i in range(self.num_images):
+                data_sample = data_batch['data_samples'][i]
+                img_path = data_sample.get('img_path')
+                img = data_batch['inputs'][i].permute(1, 2, 0).numpy()
+                
+                self._visualizer.add_datasample(
+                    os.path.basename(img_path) if self.show else 'train_img/%d' % i,
+                    img,
+                    data_sample=data_sample,
+                    draw_gt=True,
+                    draw_pred=False,
+                    draw_bbox=False,
+                    draw_heatmap=True,
+                    show=self.show,
+                    wait_time=self.wait_time,
+                    kpt_score_thr=0.0001,
+                    step=total_curr_iter)
+        
 
     def after_val_iter(self, runner: Runner, batch_idx: int, data_batch: dict,
                        outputs: Sequence[PoseDataSample]) -> None:
@@ -96,26 +134,27 @@ class PoseVisualizationHook(Hook):
         total_curr_iter = runner.iter + batch_idx
 
         # Visualize only the first data
-        img_path = data_batch['data_samples'][0].get('img_path')
-        img_bytes = self.file_client.get(img_path)
-        img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
-        data_sample = outputs[0]
-
-        # revert the heatmap on the original image
-        data_sample = merge_data_samples([data_sample])
-
         if total_curr_iter % self.interval == 0:
-            self._visualizer.add_datasample(
-                os.path.basename(img_path) if self.show else 'val_img',
-                img,
-                data_sample=data_sample,
-                draw_gt=False,
-                draw_bbox=True,
-                draw_heatmap=True,
-                show=self.show,
-                wait_time=self.wait_time,
-                kpt_score_thr=self.score_thr,
-                step=total_curr_iter)
+            for i in range(self.num_images):
+                img_path = data_batch['data_samples'][i].get('img_path')
+                img_bytes = self.file_client.get(img_path)
+                img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+                data_sample = outputs[i]
+
+                # revert the heatmap on the original image
+                data_sample = merge_data_samples([data_sample])
+
+                self._visualizer.add_datasample(
+                    os.path.basename(img_path) if self.show else 'val_img/%d' % i,
+                    img,
+                    data_sample=data_sample,
+                    draw_gt=False,
+                    draw_bbox=True,
+                    draw_heatmap=True,
+                    show=self.show,
+                    wait_time=self.wait_time,
+                    kpt_score_thr=self.score_thr,
+                    step=total_curr_iter)
 
     def after_test_iter(self, runner: Runner, batch_idx: int, data_batch: dict,
                         outputs: Sequence[PoseDataSample]) -> None:
