@@ -10,6 +10,7 @@ from mmcv.image import imflip
 from mmcv.transforms import BaseTransform
 from mmcv.transforms.utils import avoid_cache_randomness, cache_randomness
 from mmengine import is_list_of
+from mmengine.dist import get_dist_info
 from scipy.stats import truncnorm
 
 from mmpose.codecs import *  # noqa: F401, F403
@@ -639,7 +640,9 @@ class Albumentation(BaseTransform):
         if mmengine.is_str(obj_type):
             if albumentations is None:
                 raise RuntimeError('albumentations is not installed')
-            if not hasattr(albumentations.augmentations.transforms, obj_type):
+            rank, _ = get_dist_info()
+            if rank == 0 and not hasattr(
+                    albumentations.augmentations.transforms, obj_type):
                 warnings.warn(
                     f'{obj_type} is not pixel-level transformations. '
                     'Please use with caution.')
@@ -949,15 +952,27 @@ class GenerateTarget(BaseTransform):
         if not isinstance(self.encoder, list):
             # For single encoding, the encoded items will be directly added
             # into results.
+            auxiliary_encode_kwargs = {
+                key: results[key]
+                for key in self.encoder.auxiliary_encode_keys
+            }
             encoded = self.encoder.encode(
-                keypoints=keypoints, keypoints_visible=keypoints_visible)
+                keypoints=keypoints,
+                keypoints_visible=keypoints_visible,
+                **auxiliary_encode_kwargs)
 
         else:
-            encoded_list = [
-                _encoder.encode(
-                    keypoints=keypoints, keypoints_visible=keypoints_visible)
-                for _encoder in self.encoder
-            ]
+            encoded_list = []
+            for _encoder in self.encoder:
+                auxiliary_encode_kwargs = {
+                    key: results[key]
+                    for key in _encoder.auxiliary_encode_keys
+                }
+                encoded_list.append(
+                    _encoder.encode(
+                        keypoints=keypoints,
+                        keypoints_visible=keypoints_visible,
+                        **auxiliary_encode_kwargs))
 
             if self.multilevel:
                 # For multilevel encoding, the encoded items from each encoder

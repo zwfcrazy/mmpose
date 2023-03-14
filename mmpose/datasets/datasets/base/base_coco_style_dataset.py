@@ -3,7 +3,7 @@ import copy
 import os.path as osp
 from copy import deepcopy
 from itertools import filterfalse, groupby
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from mmengine.dataset import BaseDataset, force_full_init
@@ -147,6 +147,19 @@ class BaseCocoStyleDataset(BaseDataset):
         """
         data_info = self.get_data_info(idx)
 
+        return self.pipeline(data_info)
+
+    def get_data_info(self, idx: int) -> dict:
+        """Get data info by index.
+
+        Args:
+            idx (int): Index of data info.
+
+        Returns:
+            dict: Data info.
+        """
+        data_info = super().get_data_info(idx)
+
         # Add metainfo items that are required in the pipeline and the model
         metainfo_keys = [
             'upper_body_ids', 'lower_body_ids', 'flip_pairs',
@@ -160,7 +173,7 @@ class BaseCocoStyleDataset(BaseDataset):
 
             data_info[key] = deepcopy(self._metainfo[key])
 
-        return self.pipeline(data_info)
+        return data_info
 
     def load_data_list(self) -> List[dict]:
         """Load data list from COCO annotation file or person detection result
@@ -169,16 +182,17 @@ class BaseCocoStyleDataset(BaseDataset):
         if self.bbox_file:
             data_list = self._load_detection_results()
         else:
-            data_list = self._load_annotations()
+            instance_list, image_list = self._load_annotations()
 
             if self.data_mode == 'topdown':
-                data_list = self._get_topdown_data_infos(data_list)
+                data_list = self._get_topdown_data_infos(instance_list)
             else:
-                data_list = self._get_bottomup_data_infos(data_list)
+                data_list = self._get_bottomup_data_infos(
+                    instance_list, image_list)
 
         return data_list
 
-    def _load_annotations(self):
+    def _load_annotations(self) -> Tuple[List[dict], List[dict]]:
         """Load data from annotations in COCO format."""
 
         check_file_exist(self.ann_file)
@@ -188,22 +202,31 @@ class BaseCocoStyleDataset(BaseDataset):
         # and each dict contains the 'id', 'name', etc. about this category
         self._metainfo['CLASSES'] = coco.loadCats(coco.getCatIds())
 
-        data_list = []
+        instance_list = []
+        image_list = []
 
         for img_id in coco.getImgIds():
             img = coco.loadImgs(img_id)[0]
+            img.update({
+                'img_id':
+                img_id,
+                'img_path':
+                osp.join(self.data_prefix['img'], img['file_name']),
+            })
+            image_list.append(img)
+
             ann_ids = coco.getAnnIds(imgIds=img_id)
             for ann in coco.loadAnns(ann_ids):
 
-                data_info = self.parse_data_info(
+                instance_info = self.parse_data_info(
                     dict(raw_ann_info=ann, raw_img_info=img))
 
                 # skip invalid instance annotation.
-                if not data_info:
+                if not instance_info:
                     continue
 
-                data_list.append(data_info)
-        return data_list
+                instance_list.append(instance_info)
+        return instance_list, image_list
 
     def parse_data_info(self, raw_data_info: dict) -> Optional[dict]:
         """Parse raw COCO annotation of an instance.
@@ -227,7 +250,6 @@ class BaseCocoStyleDataset(BaseDataset):
         if 'bbox' not in ann or 'keypoints' not in ann:
             return None
 
-        img_path = osp.join(self.data_prefix['img'], img['file_name'])
         img_w, img_h = img['width'], img['height']
 
         # get bbox in shape [1, 4], formatted as xywh
@@ -252,7 +274,7 @@ class BaseCocoStyleDataset(BaseDataset):
 
         data_info = {
             'img_id': ann['image_id'],
-            'img_path': img_path,
+            'img_path': img['img_path'],
             'bbox': bbox,
             'bbox_score': np.ones(1, dtype=np.float32),
             'num_keypoints': num_keypoints,
@@ -294,21 +316,26 @@ class BaseCocoStyleDataset(BaseDataset):
                 return False
         return True
 
-    def _get_topdown_data_infos(self, data_list: List[Dict]) -> List[Dict]:
+    def _get_topdown_data_infos(self, instance_list: List[Dict]) -> List[Dict]:
         """Organize the data list in top-down mode."""
         # sanitize data samples
-        data_list_tp = list(filter(self._is_valid_instance, data_list))
+        data_list_tp = list(filter(self._is_valid_instance, instance_list))
 
         return data_list_tp
 
-    def _get_bottomup_data_infos(self, data_list):
+    def _get_bottomup_data_infos(self, instance_list: List[Dict],
+                                 image_list: List[Dict]) -> List[Dict]:
         """Organize the data list in bottom-up mode."""
 
         # bottom-up data list
         data_list_bu = []
 
+        used_img_ids = set()
+
         # group instances by img_id
-        for img_id, data_infos in groupby(data_list, lambda x: x['img_id']):
+        for img_id, data_infos in groupby(instance_list,
+                                          lambda x: x['img_id']):
+            used_img_ids.add(img_id)
             data_infos = list(data_infos)
 
             # image data
@@ -335,6 +362,18 @@ class BaseCocoStyleDataset(BaseDataset):
             data_info_bu['invalid_segs'] = invalid_segs
 
             data_list_bu.append(data_info_bu)
+
+        # add images without instance for evaluation
+        if self.test_mode:
+            for img_info in image_list:
+                if img_info['img_id'] not in used_img_ids:
+                    data_info_bu = {
+                        'img_id': img_info['img_id'],
+                        'img_path': img_info['img_path'],
+                        'id': list(),
+                        'raw_ann_info': None,
+                    }
+                    data_list_bu.append(data_info_bu)
 
         return data_list_bu
 

@@ -3,7 +3,7 @@ from typing import Sequence, Union
 
 import numpy as np
 import torch
-from mmcv.transforms import BaseTransform, to_tensor
+from mmcv.transforms import BaseTransform
 from mmengine.structures import InstanceData, PixelData
 from mmengine.utils import is_seq_of
 
@@ -27,8 +27,8 @@ def image_to_tensor(img: Union[np.ndarray,
     if isinstance(img, np.ndarray):
         if len(img.shape) < 3:
             img = np.expand_dims(img, -1)
-        img = np.ascontiguousarray(img.transpose(2, 0, 1))
-        tensor = to_tensor(img)
+
+        tensor = torch.from_numpy(img).permute(2, 0, 1).contiguous()
     else:
         assert is_seq_of(img, np.ndarray)
         tensor = torch.stack([image_to_tensor(_img) for _img in img])
@@ -87,17 +87,18 @@ class PackPoseInputs(BaseTransform):
         'bbox_scale': 'bbox_scales',
         'bbox_score': 'bbox_scores',
         'keypoints': 'keypoints',
-        'keypoints_visible': 'keypoints_visible'
+        'keypoints_visible': 'keypoints_visible',
     }
 
     # items in `label_mapping_table` will be packed into
-    # PoseDataSample.gt_instances and converted to Tensor. These items will
-    # be used for computing losses
+    # PoseDataSample.gt_instance_labels and converted to Tensor. These items
+    # will be used for computing losses
     label_mapping_table = {
         'keypoint_labels': 'keypoint_labels',
         'keypoint_x_labels': 'keypoint_x_labels',
         'keypoint_y_labels': 'keypoint_y_labels',
-        'keypoint_weights': 'keypoint_weights'
+        'keypoint_weights': 'keypoint_weights',
+        'instance_coords': 'instance_coords'
     }
 
     # items in `field_mapping_table` will be packed into
@@ -105,6 +106,7 @@ class PackPoseInputs(BaseTransform):
     # used for computing losses
     field_mapping_table = {
         'heatmaps': 'heatmaps',
+        'instance_heatmaps': 'instance_heatmaps',
         'heatmap_mask': 'heatmap_mask',
         'heatmap_weights': 'heatmap_weights',
         'displacements': 'displacements',
