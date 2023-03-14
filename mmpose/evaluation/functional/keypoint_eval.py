@@ -95,7 +95,11 @@ def keypoint_pck_accuracy(pred: np.ndarray, gt: np.ndarray, mask: np.ndarray,
         - cnt (int): Number of valid keypoints.
     """
     distances = _calc_distances(pred, gt, mask, norm_factor)
-    acc = np.array([_distance_acc(d, thr) for d in distances])
+    num_keypoints = distances.shape[0]
+    if isinstance(thr, float):
+        thr = [thr] * num_keypoints
+    acc = np.array(
+        [_distance_acc(distances[i], thr[i]) for i in range(num_keypoints)])
     valid_acc = acc[acc >= 0]
     cnt = len(valid_acc)
     avg_acc = valid_acc.mean() if cnt > 0 else 0

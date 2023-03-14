@@ -144,6 +144,7 @@ class KeypointPartitionMetric(BaseMetric):
             _dataset_meta = deepcopy(dataset_meta)
             _dataset_meta['num_keypoints'] = len(keypoint_ids)
             _dataset_meta['sigmas'] = _dataset_meta['sigmas'][keypoint_ids]
+            _dataset_meta['pck_thr'] = _dataset_meta['pck_thr'][keypoint_ids]
             self.metrics[partition_name].dataset_meta = _dataset_meta
 
     def process(self, data_batch: Sequence[dict],
