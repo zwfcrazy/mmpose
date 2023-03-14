@@ -14,11 +14,10 @@ from mmpose.apis import init_model as init_pose_estimator
 from mmpose.evaluation.functional import nms
 from mmpose.registry import VISUALIZERS
 from mmpose.structures import merge_data_samples, split_instances
-from mmpose.utils import register_all_modules as register_mmpose_modules
+from mmpose.utils import adapt_mmdet_pipeline
 
 try:
     from mmdet.apis import inference_detector, init_detector
-    from mmdet.utils import register_all_modules as register_mmdet_modules
     has_mmdet = True
 except (ImportError, ModuleNotFoundError):
     has_mmdet = False
@@ -29,7 +28,6 @@ def process_one_image(args, img_path, detector, pose_estimator, visualizer,
     """Visualize predicted keypoints (and heatmaps) of one image."""
 
     # predict bbox
-    register_mmdet_modules()
     det_result = inference_detector(detector, img_path)
     pred_instance = det_result.pred_instances.cpu().numpy()
     bboxes = np.concatenate(
@@ -39,7 +37,6 @@ def process_one_image(args, img_path, detector, pose_estimator, visualizer,
     bboxes = bboxes[nms(bboxes, args.nms_thr), :4]
 
     # predict keypoints
-    register_mmpose_modules()
     pose_results = inference_topdown(pose_estimator, img_path, bboxes)
     data_samples = merge_data_samples(pose_results)
 
@@ -57,12 +54,14 @@ def process_one_image(args, img_path, detector, pose_estimator, visualizer,
         draw_gt=False,
         draw_heatmap=args.draw_heatmap,
         draw_bbox=args.draw_bbox,
+        show_kpt_idx=args.show_kpt_idx,
         show=args.show,
         wait_time=show_interval,
         out_file=out_file,
         kpt_score_thr=args.kpt_thr)
 
-    return data_samples.pred_instances
+    # if there is no instance detected, return None
+    return data_samples.get('pred_instances', None)
 
 
 def main():
@@ -118,6 +117,11 @@ def main():
         default=False,
         help='Draw heatmap predicted by the model')
     parser.add_argument(
+        '--show-kpt-idx',
+        action='store_true',
+        default=False,
+        help='Whether to show the index of keypoints')
+    parser.add_argument(
         '--radius',
         type=int,
         default=3,
@@ -146,12 +150,11 @@ def main():
             f'{os.path.splitext(os.path.basename(args.input))[0]}.json'
 
     # build detector
-    register_mmdet_modules()
     detector = init_detector(
         args.det_config, args.det_checkpoint, device=args.device)
+    detector.cfg = adapt_mmdet_pipeline(detector.cfg)
 
     # build pose estimator
-    register_mmpose_modules()
     pose_estimator = init_pose_estimator(
         args.pose_config,
         args.pose_checkpoint,
@@ -195,6 +198,7 @@ def main():
                 pose_estimator,
                 visualizer,
                 show_interval=1)
+
             progressbar.update()
             pred_instances_list.append(
                 dict(
