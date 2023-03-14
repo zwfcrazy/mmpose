@@ -73,7 +73,15 @@ class PCKAccuracy(BaseMetric):
                  collect_device: str = 'cpu',
                  prefix: Optional[str] = None) -> None:
         super().__init__(collect_device=collect_device, prefix=prefix)
-        self.thr = thr
+        self.thr = thr if thr is not None else self.dataset_meta.get(
+            'pck_thr', 0.05)
+        assert isinstance(self.thr, float) or isinstance(self.thr, Sequence), \
+            """PCK threshold should be either a float
+            number or a sequence of numbers."""
+        if isinstance(self.thr, Sequence):
+            assert len(self.thr) == self.dataset_meta['num_keypoints'], \
+                """Length of PCK threshold should be the
+                same as number of joints."""
         self.norm_item = norm_item if isinstance(norm_item,
                                                  (tuple,
                                                   list)) else [norm_item]
