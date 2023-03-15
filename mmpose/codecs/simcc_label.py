@@ -3,6 +3,7 @@ from itertools import product
 from typing import Optional, Tuple, Union
 
 import numpy as np
+import torch
 
 from mmpose.codecs.utils import get_simcc_maximum
 from mmpose.codecs.utils.refinement import refine_simcc_dark
@@ -134,6 +135,14 @@ class SimCCLabel(BaseKeypointCodec):
             keypoint_weights=keypoint_weights)
 
         return encoded
+
+    def torch_decode(self, simcc_x, simcc_y):
+        max_val_x, x_locs = torch.max(simcc_x, dim=2)
+        max_val_y, y_locs = torch.max(simcc_y, dim=2)
+        scores = torch.maximum(max_val_x, max_val_y)
+        keypoints = torch.stack([x_locs, y_locs], dim=-1)
+        keypoints = keypoints.float() / self.simcc_split_ratio
+        return keypoints, scores
 
     def decode(self, simcc_x: np.ndarray,
                simcc_y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:

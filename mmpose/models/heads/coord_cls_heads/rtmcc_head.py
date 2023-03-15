@@ -152,19 +152,7 @@ class RTMCCHead(BaseHead):
         self.cls_x = nn.Linear(gau_cfg['hidden_dims'], W, bias=False)
         self.cls_y = nn.Linear(gau_cfg['hidden_dims'], H, bias=False)
 
-    def forward(self, feats: Tuple[Tensor]) -> Tuple[Tensor, Tensor]:
-        """Forward the network.
-
-        The input is multi scale feature maps and the
-        output is the heatmap.
-
-        Args:
-            feats (Tuple[Tensor]): Multi scale feature maps.
-
-        Returns:
-            pred_x (Tensor): 1d representation of x.
-            pred_y (Tensor): 1d representation of y.
-        """
+    def _forward(self, feats: Tuple[Tensor]) -> Tuple[Tensor, Tensor]:
         feats = self._transform_inputs(feats)
 
         feats = self.final_layer(feats)  # -> B, K, H, W
@@ -180,6 +168,26 @@ class RTMCCHead(BaseHead):
         pred_y = self.cls_y(feats)
 
         return pred_x, pred_y
+
+    def forward(self, feats: Tuple[Tensor]) -> Tuple[Tensor, Tensor]:
+        """Forward the network.
+
+        The input is multi scale feature maps and the
+        output is the heatmap.
+
+        Args:
+            feats (Tuple[Tensor]): Multi scale feature maps.
+
+        Returns:
+            pred_x (Tensor): 1d representation of x.
+            pred_y (Tensor): 1d representation of y.
+        """
+        return self._forward(feats)
+
+    def forward_with_decode(self,
+                            feats: Tuple[Tensor]) -> Tuple[Tensor, Tensor]:
+        pred_x, pred_y = self._forward(feats)
+        return self.decoder.torch_decode(pred_x, pred_y)
 
     def predict(
         self,
