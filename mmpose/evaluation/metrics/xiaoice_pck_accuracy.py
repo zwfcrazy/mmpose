@@ -1,5 +1,4 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import warnings
 from typing import Dict, Optional, Sequence
 
 import numpy as np
@@ -14,7 +13,6 @@ from ..functional import keypoint_pck_accuracy
 class XiaoIcePCKAccuracy(BaseMetric):
 
     def __init__(self,
-                 torso_joints: Sequence,
                  thr: float = 0.05,
                  collect_device: str = 'cpu',
                  prefix: Optional[str] = None) -> None:
@@ -28,8 +26,6 @@ class XiaoIcePCKAccuracy(BaseMetric):
             assert len(self.thr) == self.dataset_meta['num_keypoints'], \
                 """Length of PCK threshold should be the
                 same as number of joints."""
-        assert isinstance(torso_joints, Sequence) and len(torso_joints) == 4
-        self.torso_joints = torso_joints
 
     def process(self, data_batch: Sequence[dict],
                 data_samples: Sequence[dict]) -> None:
@@ -60,20 +56,7 @@ class XiaoIcePCKAccuracy(BaseMetric):
                 'mask': mask,
             }
 
-            torso_size_ = (
-                np.linalg.norm(gt_coords[0][self.torso_joints[0]] -
-                               gt_coords[0][self.torso_joints[1]]) +
-                np.linalg.norm(gt_coords[0][self.torso_joints[2]] -
-                               gt_coords[0][self.torso_joints[3]])) / 2
-            if torso_size_ < 1:
-                torso_size_ = (
-                    np.linalg.norm(pred_coords[0][self.torso_joints[0]] -
-                                   pred_coords[0][self.torso_joints[1]]) +
-                    np.linalg.norm(pred_coords[0][self.torso_joints[2]] -
-                                   pred_coords[0][self.torso_joints[3]])) / 2
-                warnings.warn('Ground truth torso size < 1. '
-                              'Use torso size from predicted '
-                              'keypoint results instead.')
+            torso_size_ = gt['torso_size']
             torso_size = np.array([torso_size_, torso_size_]).reshape(-1, 2)
             result['torso_size'] = torso_size
 
